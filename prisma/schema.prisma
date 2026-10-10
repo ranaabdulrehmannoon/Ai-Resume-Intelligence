@@ -1,0 +1,196 @@
+// ============================================================
+// AI Resume Intelligence — Database Schema
+// ============================================================
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── AUTH ──────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  accounts  Account[]
+  sessions  Session[]
+  resumes   Resume[]
+  jobDescriptions JobDescription[]
+  analyses  Analysis[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ── CORE DOMAIN ───────────────────────────────────────────────
+
+model Resume {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  fileName  String?
+  fileUrl   String?
+  fileType  String?  // "pdf" | "docx"
+  rawText   String   @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  versions ResumeVersion[]
+  analyses Analysis[]
+
+  @@index([userId])
+  @@map("resumes")
+}
+
+// Structured, versioned extraction of a resume — one resume can be
+// re-parsed/re-extracted over time without losing history.
+model ResumeVersion {
+  id        String   @id @default(cuid())
+  resumeId  String
+  version   Int      @default(1)
+
+  // Structured extraction (see src/types/resume.ts for the shape)
+  candidate      Json
+  summary        String   @db.Text
+  skills         Json     // string[]
+  experience     Json     // ExperienceEntry[]
+  education      Json     // EducationEntry[]
+  projects       Json     // ProjectEntry[]
+  certifications Json     // string[]
+  achievements   Json     // string[]
+
+  createdAt DateTime @default(now())
+
+  resume Resume @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+
+  @@unique([resumeId, version])
+  @@map("resume_versions")
+}
+
+model JobDescription {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  company   String?
+  location  String?
+  rawText   String   @db.Text
+
+  employmentType   String?
+  experienceYears  Int?
+  requiredSkills   Json     // string[]
+  preferredSkills  Json     // string[]
+  responsibilities Json     // string[]
+  qualifications   Json     // string[]
+  technologies     Json     // string[]
+  keywords         Json     // string[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  analyses Analysis[]
+
+  @@index([userId])
+  @@map("job_descriptions")
+}
+
+model Analysis {
+  id               String @id @default(cuid())
+  userId           String
+  resumeId         String
+  jobDescriptionId String
+
+  // Deterministic scoring engine output
+  totalScore      Int
+  skillScore      Int
+  experienceScore Int
+  keywordScore    Int
+  projectScore    Int
+  educationScore  Int
+  structureScore  Int
+  formattingScore Int
+
+  matchedSkills Json // SkillMatch[]
+  missingSkills Json // SkillGap[]
+  weakSkills    Json // SkillMatch[]
+
+  // AI-generated (validated) content
+  bulletAnalysis  Json // BulletAnalysis[]
+  strengths       Json // Insight[]
+  weaknesses      Json // Insight[]
+  recommendations Json // Recommendation[]
+  interviewQuestions Json // InterviewQuestionSet
+
+  status    AnalysisStatus @default(PENDING)
+  errorMessage String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resume         Resume         @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+  jobDescription JobDescription @relation(fields: [jobDescriptionId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([resumeId])
+  @@index([jobDescriptionId])
+  @@map("analyses")
+}
+
+enum AnalysisStatus {
+  PENDING
+  PROCESSING
+  COMPLETE
+  FAILED
+}
