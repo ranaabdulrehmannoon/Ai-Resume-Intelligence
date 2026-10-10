@@ -186,13 +186,4 @@ The application can be deployed as a standard Next.js application, including on 
 
 Password reset links are logged to the server console in development because no email delivery provider is configured by default.
 
-## Security Notes
 
-- Resume and job-description text is treated as untrusted input before being sent to the AI provider.
-- AI responses are parsed and validated with Zod before they are persisted.
-- Authentication data and uploaded document content are stored server-side.
-- Keep database credentials, authentication secrets, and API keys out of source control.
-
-## License
-
-This project is private and does not currently include an open-source license.
